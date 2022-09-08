@@ -21,8 +21,8 @@ type GameColor
 
 
 type alias Position =
-    { posX : Int
-    , posY : Int
+    { posX : Number
+    , posY : Number
     }
 
 
@@ -30,7 +30,7 @@ type Drone
     = Drone
         { color : GameColor
         , position : Position
-        , size : Int
+        , size : Number
         , carry : Maybe Drone
         }
 
@@ -43,14 +43,25 @@ type Direction
 type alias Wall =
     { start : Position
     , direction : Direction
-    , length : Int
+    , length : Number
     }
 
 
 type alias Board =
-    { size : Int
+    { size : Number
+    , player : Drone
     , drones : List Drone
     , walls : List Wall
+    }
+
+
+type alias Meta =
+    { key_down : Bool }
+
+
+type alias Game =
+    { board : Board
+    , meta : Meta
     }
 
 
@@ -58,18 +69,29 @@ type alias Board =
 -- MAIN
 
 
+make_game : Board -> Game
+make_game board =
+    { board = board, meta = { key_down = False } }
+
+
+level : Board
 level =
-    Board
-        20
-        [ Drone {Blue, (Position 0 0), 3, Nothing}
-        ]
+    let
+        small_drone =
+            Drone { color = Green, position = Position 1 1, size = 1, carry = Nothing }
+    in
+    { size = 20
+    , player = Drone { color = Blue, position = Position 0 0, size = 3, carry = Nothing }
+    , drones = [ Drone { color = Red, position = Position 9 3, size = 3, carry = Just small_drone } ]
+    , walls =
         [ Wall (Position 5 5) Vertical 4
         , Wall (Position 5 5) Horizontal 7
         ]
+    }
 
 
 main =
-    game view update level
+    game view update (make_game level)
 
 
 
@@ -83,7 +105,7 @@ expandWall wall =
             Position posX posY
 
         blocks base =
-            List.map (\diff -> base + diff) (List.range 0 wall.length)
+            List.map (\diff -> base + toFloat diff) (List.range 0 (round wall.length))
     in
     case wall.direction of
         Vertical ->
@@ -102,21 +124,26 @@ flip f x y =
 -- VIEW
 
 
-view : Computer -> Board -> List Shape
-view computer board =
-    let
-        w : Int
-        w =
-            min (round computer.screen.width) (round computer.screen.height)
+view : Computer -> Game -> List Shape
+view computer game =
+    view_board computer game.board
 
-        r : Int
+
+view_board : Computer -> Board -> List Shape
+view_board computer board =
+    let
+        w : Number
+        w =
+            min computer.screen.width computer.screen.height
+
+        r : Number
         r =
-            w // board.size
+            w / board.size
 
         b =
             computer.screen.bottom
     in
-    rectangle (rgb 174 238 238) (toFloat w) (toFloat w)
+    rectangle (rgb 174 238 238) w w
         :: drawBoard r board
 
 
@@ -133,22 +160,20 @@ droneColor c =
             green
 
 
-drawBoard : Int -> Board -> List Shape
+drawBoard : Number -> Board -> List Shape
 drawBoard r board =
     drawGridX r board.size
         ++ drawGridY r board.size
+        ++ drawDrone r board.size board.player
         ++ List.concatMap (drawWall r board.size) board.walls
         ++ List.concatMap (drawDrone r board.size) board.drones
 
 
-drawDrone : Int -> Int -> Drone -> List Shape
+drawDrone : Number -> Number -> Drone -> List Shape
 drawDrone r n (Drone drone) =
     let
-        rf =
-            toFloat r
-
         justDrone =
-            rectangle (droneColor drone.color) rf rf
+            rectangle (droneColor drone.color) r r
 
         droneCarry =
             case drone.carry of
@@ -156,71 +181,114 @@ drawDrone r n (Drone drone) =
                     rectangle black 2 2
 
                 Just (Drone carried) ->
-                    rectangle (droneColor carried.color) (rf / 2) (rf / 2)
+                    rectangle (droneColor carried.color) (r / 2) (r / 2)
     in
     List.map (moveToPosition r n drone.position) [ justDrone, droneCarry ]
 
 
-drawWall : Int -> Int -> Wall -> List Shape
+drawWall : Number -> Number -> Wall -> List Shape
 drawWall r n wall =
     let
-        rf =
-            toFloat r
-
-        nf =
-            toFloat n
-
         go position =
-            moveToPosition r n position (rectangle grey rf rf)
+            moveToPosition r n position (rectangle grey r r)
     in
     List.map go (expandWall wall)
 
 
-moveToPosition : Int -> Int -> Position -> Shape -> Shape
+moveToPosition : Number -> Number -> Position -> Shape -> Shape
 moveToPosition r n position shape =
-    let
-        rf =
-            toFloat r
-
-        nf =
-            toFloat n
-    in
     shape
-        |> moveX (-1 * rf / 2)
-        |> moveY (-1 * rf / 2)
-        |> moveX (-1 * rf * (nf / 2 - 1))
-        |> moveY (-1 * rf * (nf / 2 - 1))
-        |> moveX (rf * toFloat position.posX)
-        |> moveY (rf * toFloat position.posY)
+        |> moveX (-1 * r / 2)
+        |> moveY (-1 * r / 2)
+        |> moveX (-1 * r * (n / 2 - 1))
+        |> moveY (-1 * r * (n / 2 - 1))
+        |> moveX (r * position.posX)
+        |> moveY (r * position.posY)
 
 
-drawGridX : Int -> Int -> List Shape
+drawGridX : Number -> Number -> List Shape
 drawGridX r n =
     let
         go : Int -> Shape
         go m =
-            rectangle black 1 (toFloat (r * n))
-                |> moveX ((toFloat n / 2 - toFloat m) * toFloat r)
+            rectangle black 1 (r * n)
+                |> moveX ((n / 2 - toFloat m) * r)
     in
     List.map go
-        (List.range 0 n)
+        (List.range 0 (round n))
 
 
-drawGridY : Int -> Int -> List Shape
+drawGridY : Number -> Number -> List Shape
 drawGridY r n =
     let
         go : Int -> Shape
         go m =
-            rectangle black (toFloat (r * n)) 1
-                |> moveY ((toFloat n / 2 - toFloat m) * toFloat r)
+            rectangle black (r * n) 1
+                |> moveY ((n / 2 - toFloat m) * r)
     in
     List.map go
-        (List.range 0 n)
+        (List.range 0 (round n))
 
 
 
 -- UPDATE
 
 
-update computer board =
-    board
+update : Computer -> Game -> Game
+update computer game =
+    case ( game.meta.key_down, is_pressed computer ) of
+        ( False, False ) ->
+            game
+
+        ( False, True ) ->
+            { board = update_board computer game.board, meta = { key_down = True } }
+
+        ( True, True ) ->
+            game
+
+        ( True, False ) ->
+            { board = game.board, meta = { key_down = False } }
+
+
+is_pressed : Computer -> Bool
+is_pressed computer =
+    computer.keyboard.up || computer.keyboard.down || computer.keyboard.left || computer.keyboard.right
+
+
+update_board : Computer -> Board -> Board
+update_board computer board =
+    case board.player of
+        Drone { color, position, size, carry } ->
+            let
+                dx =
+                    toX computer.keyboard
+
+                dy =
+                    toY computer.keyboard
+
+                { posX, posY } =
+                    position
+
+                newPosX =
+                    boundaries 0 (board.size - 1) (posX + dx)
+
+                newPosY =
+                    boundaries 0 (board.size - 1) (posY + dy)
+            in
+            { size = board.size
+            , player = Drone { color = color, position = Position newPosX newPosY, size = size, carry = carry }
+            , drones = board.drones
+            , walls = board.walls
+            }
+
+
+boundaries : comparable -> comparable -> comparable -> comparable
+boundaries lower_bound upper_bound x =
+    if x < lower_bound then
+        lower_bound
+
+    else if x > upper_bound then
+        upper_bound
+
+    else
+        x
