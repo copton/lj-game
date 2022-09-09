@@ -5,9 +5,68 @@
 --
 
 
-module Main exposing (main, update, view)
+module Main exposing (main, update_game, view_game)
 
+import Dict
 import Playground exposing (..)
+
+
+
+-- PDict
+
+
+type alias PDict a =
+    Dict.Dict Number (Dict.Dict Number a)
+
+
+empty : PDict a
+empty =
+    Dict.empty
+
+
+get : Position -> PDict a -> Maybe a
+get { posX, posY } d =
+    Dict.get posX d |> Maybe.andThen (Dict.get posY)
+
+
+insert : Position -> a -> PDict a -> PDict a
+insert { posX, posY } value d =
+    case Dict.get posX d of
+        Nothing ->
+            Dict.insert posX (Dict.singleton posY value) d
+
+        Just d2 ->
+            Dict.insert posX (Dict.insert posY value d2) d
+
+
+remove : Position -> PDict a -> PDict a
+remove { posX, posY } d =
+    case Dict.get posX d of
+        Nothing ->
+            d
+
+        Just d2 ->
+            Dict.insert posX (Dict.remove posY d2) d
+
+
+toList : PDict a -> List ( Position, a )
+toList d =
+    List.concatMap (\( posX, d2 ) -> List.map (\( posY, value ) -> ( Position posX posY, value )) (Dict.toList d2)) (Dict.toList d)
+
+
+fromList : List ( Position, a ) -> PDict a
+fromList =
+    List.foldr (\( pos, value ) d -> insert pos value d) empty
+
+
+union : PDict a -> PDict a -> PDict a
+union left right =
+    fromList (toList left ++ toList right)
+
+
+unions : List (PDict a) -> PDict a
+unions ds =
+    fromList (List.concatMap toList ds)
 
 
 
@@ -29,7 +88,6 @@ type alias Position =
 type Drone
     = Drone
         { color : GameColor
-        , position : Position
         , size : Number
         , carry : Maybe Drone
         }
@@ -47,11 +105,26 @@ type alias Wall =
     }
 
 
+type alias Garage =
+    { color : GameColor
+    }
+
+
+type Item
+    = WallItem
+    | DroneItem Drone
+    | GarageItem Garage
+
+
+type alias Items =
+    PDict Item
+
+
 type alias Board =
     { size : Number
-    , player : Drone
-    , drones : List Drone
-    , walls : List Wall
+    , playerPos : Position
+    , playerDrone : Drone
+    , items : Items
     }
 
 
@@ -67,35 +140,6 @@ type alias Game =
 
 
 -- MAIN
-
-
-make_game : Board -> Game
-make_game board =
-    { board = board, meta = { key_down = False } }
-
-
-level : Board
-level =
-    let
-        small_drone =
-            Drone { color = Green, position = Position 1 1, size = 1, carry = Nothing }
-    in
-    { size = 20
-    , player = Drone { color = Blue, position = Position 0 0, size = 3, carry = Nothing }
-    , drones = [ Drone { color = Red, position = Position 9 3, size = 3, carry = Just small_drone } ]
-    , walls =
-        [ Wall (Position 5 5) Vertical 4
-        , Wall (Position 5 5) Horizontal 7
-        ]
-    }
-
-
-main =
-    game view update (make_game level)
-
-
-
--- Logic
 
 
 expandWall : Wall -> List Position
@@ -115,6 +159,42 @@ expandWall wall =
             List.map (flip go wall.start.posY) (blocks wall.start.posX)
 
 
+wallItems : List Wall -> List ( Position, Item )
+wallItems walls =
+    List.map (\pos -> ( pos, WallItem )) (List.concatMap expandWall walls)
+
+
+make_game : Board -> Game
+make_game board =
+    { board = board, meta = { key_down = False } }
+
+
+level : Board
+level =
+    { size = 20
+    , playerPos = Position 0 0
+    , playerDrone = Drone { color = Blue, size = 3, carry = Nothing }
+    , items =
+        fromList
+            (wallItems
+                [ Wall (Position 5 5) Vertical 4
+                , Wall (Position 5 5) Horizontal 7
+                ]
+                ++ [ ( Position 9 3, DroneItem (Drone { color = Red, size = 3, carry = Nothing }) )
+                   , ( Position 10 10, GarageItem (Garage Red) )
+                   ]
+            )
+    }
+
+
+main =
+    game view_game update_game (make_game level)
+
+
+
+-- Logic
+
+
 flip : (a -> b -> c) -> b -> a -> c
 flip f x y =
     f y x
@@ -124,8 +204,8 @@ flip f x y =
 -- VIEW
 
 
-view : Computer -> Game -> List Shape
-view computer game =
+view_game : Computer -> Game -> List Shape
+view_game computer game =
     view_board computer game.board
 
 
@@ -139,11 +219,8 @@ view_board computer board =
         r : Number
         r =
             w / board.size
-
-        b =
-            computer.screen.bottom
     in
-    rectangle (rgb 174 238 238) w w
+    image w w "../res/sand.jpg"
         :: drawBoard r board
 
 
@@ -164,35 +241,68 @@ drawBoard : Number -> Board -> List Shape
 drawBoard r board =
     drawGridX r board.size
         ++ drawGridY r board.size
-        ++ drawDrone r board.size board.player
-        ++ List.concatMap (drawWall r board.size) board.walls
-        ++ List.concatMap (drawDrone r board.size) board.drones
+        --        ++ drawTiles r board.size
+        ++ drawDrone r board.size board.playerPos board.playerDrone
+        ++ List.concatMap (drawItem r board.size) (toList board.items)
 
 
-drawDrone : Number -> Number -> Drone -> List Shape
-drawDrone r n (Drone drone) =
+allPositions : Number -> List Position
+allPositions n =
+    let
+        range =
+            List.range 0 (round n - 1)
+    in
+    List.concatMap (\x -> List.map (\y -> Position (toFloat x) (toFloat y)) range) range
+
+
+drawTiles : Number -> Number -> List Shape
+drawTiles r n =
+    let
+        drawTile pos =
+            moveToPosition r n pos (image (r - 2) (r - 2) "../res/sand.jpg")
+    in
+    List.map drawTile (allPositions n)
+
+
+drawItem : Number -> Number -> ( Position, Item ) -> List Shape
+drawItem r n ( pos, item ) =
+    case item of
+        WallItem ->
+            [ moveToPosition r n pos (drawWall r) ]
+
+        DroneItem drone ->
+            drawDrone r n pos drone
+
+        GarageItem garage ->
+            [ drawGarage r n pos garage ]
+
+
+drawGarage : Number -> Number -> Position -> Garage -> Shape
+drawGarage r n pos garage =
+    moveToPosition r n pos (circle (droneColor garage.color) r)
+
+
+drawWall : Number -> Shape
+drawWall r =
+    image r r "../res/brick.jpg"
+
+
+drawDrone : Number -> Number -> Position -> Drone -> List Shape
+drawDrone r n pos (Drone drone) =
     let
         justDrone =
-            rectangle (droneColor drone.color) r r
+            image r r "../res/drone.jpg"
 
+        -- rectangle (droneColor drone.color) r r
         droneCarry =
             case drone.carry of
                 Nothing ->
-                    rectangle black 2 2
+                    rectangle (droneColor drone.color) (r / 6) (r / 6)
 
                 Just (Drone carried) ->
-                    rectangle (droneColor carried.color) (r / 2) (r / 2)
+                    rectangle (droneColor carried.color) (r / 3) (r / 3)
     in
-    List.map (moveToPosition r n drone.position) [ justDrone, droneCarry ]
-
-
-drawWall : Number -> Number -> Wall -> List Shape
-drawWall r n wall =
-    let
-        go position =
-            moveToPosition r n position (rectangle grey r r)
-    in
-    List.map go (expandWall wall)
+    List.map (moveToPosition r n pos) [ justDrone, droneCarry ]
 
 
 moveToPosition : Number -> Number -> Position -> Shape -> Shape
@@ -234,8 +344,8 @@ drawGridY r n =
 -- UPDATE
 
 
-update : Computer -> Game -> Game
-update computer game =
+update_game : Computer -> Game -> Game
+update_game computer game =
     case ( game.meta.key_down, is_pressed computer ) of
         ( False, False ) ->
             game
@@ -257,29 +367,53 @@ is_pressed computer =
 
 update_board : Computer -> Board -> Board
 update_board computer board =
-    case board.player of
-        Drone { color, position, size, carry } ->
+    case board.playerDrone of
+        Drone { color, size, carry } ->
             let
-                dx =
-                    toX computer.keyboard
-
-                dy =
-                    toY computer.keyboard
-
-                { posX, posY } =
-                    position
-
                 newPosX =
-                    boundaries 0 (board.size - 1) (posX + dx)
+                    boundaries 0 (board.size - 1) (board.playerPos.posX + toX computer.keyboard)
 
                 newPosY =
-                    boundaries 0 (board.size - 1) (posY + dy)
+                    boundaries 0 (board.size - 1) (board.playerPos.posY + toY computer.keyboard)
+
+                newPos =
+                    Position newPosX newPosY
             in
-            { size = board.size
-            , player = Drone { color = color, position = Position newPosX newPosY, size = size, carry = carry }
-            , drones = board.drones
-            , walls = board.walls
-            }
+            case get newPos board.items of
+                Nothing ->
+                    { size = board.size
+                    , playerPos = newPos
+                    , playerDrone = Drone { color = color, size = size, carry = carry }
+                    , items = board.items
+                    }
+
+                Just WallItem ->
+                    board
+
+                Just (DroneItem drone) ->
+                    { size = board.size
+                    , playerPos = newPos
+                    , playerDrone = Drone { color = color, size = size, carry = Just drone }
+                    , items = remove newPos board.items
+                    }
+
+                Just (GarageItem garage) ->
+                    case carry of
+                        Nothing ->
+                            board
+
+                        Just carried_drone ->
+                            case carried_drone of
+                                Drone { c=color, s=size, c=carry } ->
+                                    if garage.color /= carried_color then
+                                        board
+
+                                    else
+                                        { size = board.size
+                                        , playerPos = newPos
+                                        , playerDrone = Drone { color = color, size = size + carried_size, carry = Nothing }
+                                        , items = remove newPos board.items
+                                        }
 
 
 boundaries : comparable -> comparable -> comparable -> comparable
