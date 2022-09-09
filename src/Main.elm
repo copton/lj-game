@@ -16,7 +16,7 @@ import Playground exposing (..)
 
 
 type alias PDict a =
-    Dict.Dict Number (Dict.Dict Number a)
+    Dict.Dict Int (Dict.Dict Int a)
 
 
 empty : PDict a
@@ -80,21 +80,21 @@ type GameColor
 
 
 type alias Position =
-    { posX : Number
-    , posY : Number
+    { posX : Int
+    , posY : Int
     }
 
 
 type alias Drone =
     { color : GameColor
-    , size : Number
+    , size : Int
     , carry : Maybe CarriedDrone
     }
 
 
 type alias CarriedDrone =
     { color : GameColor
-    , size : Number
+    , size : Int
     }
 
 
@@ -106,7 +106,7 @@ type Direction
 type alias Wall =
     { start : Position
     , direction : Direction
-    , length : Number
+    , length : Int
     }
 
 
@@ -126,7 +126,7 @@ type alias Items =
 
 
 type alias Board =
-    { size : Number
+    { size : Int
     , playerPos : Position
     , playerDrone : Drone
     , items : Items
@@ -154,7 +154,7 @@ expandWall wall =
             Position posX posY
 
         blocks base =
-            List.map (\diff -> base + toFloat diff) (List.range 0 (round wall.length))
+            List.map (\diff -> base + diff) (List.range 0 wall.length)
     in
     case wall.direction of
         Vertical ->
@@ -223,7 +223,7 @@ view_board computer board =
 
         r : Number
         r =
-            w / board.size
+            w / toFloat board.size
     in
     image w w "../res/sand.jpg"
         :: drawBoard r board
@@ -247,20 +247,20 @@ drawBoard r board =
     drawGridX r board.size
         ++ drawGridY r board.size
         --        ++ drawTiles r board.size
-        ++ drawDrone r board.size board.playerPos board.playerDrone
         ++ List.concatMap (drawItem r board.size) (toList board.items)
+        ++ drawDrone r board.size board.playerPos board.playerDrone
 
 
-allPositions : Number -> List Position
+allPositions : Int -> List Position
 allPositions n =
     let
         range =
-            List.range 0 (round n - 1)
+            List.range 0 (n - 1)
     in
-    List.concatMap (\x -> List.map (\y -> Position (toFloat x) (toFloat y)) range) range
+    List.concatMap (\x -> List.map (\y -> Position x y) range) range
 
 
-drawTiles : Number -> Number -> List Shape
+drawTiles : Number -> Int -> List Shape
 drawTiles r n =
     let
         drawTile pos =
@@ -269,7 +269,7 @@ drawTiles r n =
     List.map drawTile (allPositions n)
 
 
-drawItem : Number -> Number -> ( Position, Item ) -> List Shape
+drawItem : Number -> Int -> ( Position, Item ) -> List Shape
 drawItem r n ( pos, item ) =
     case item of
         WallItem ->
@@ -282,7 +282,7 @@ drawItem r n ( pos, item ) =
             [ drawGarage r n pos garage ]
 
 
-drawGarage : Number -> Number -> Position -> Garage -> Shape
+drawGarage : Number -> Int -> Position -> Garage -> Shape
 drawGarage r n pos garage =
     moveToPosition r n pos (circle (droneColor garage.color) (r / 2))
 
@@ -292,7 +292,7 @@ drawWall r =
     image r r "../res/brick.jpg"
 
 
-drawDrone : Number -> Number -> Position -> Drone -> List Shape
+drawDrone : Number -> Int -> Position -> Drone -> List Shape
 drawDrone r n pos drone =
     let
         justDrone =
@@ -310,39 +310,39 @@ drawDrone r n pos drone =
     List.map (moveToPosition r n pos) [ justDrone, droneCarry ]
 
 
-moveToPosition : Number -> Number -> Position -> Shape -> Shape
+moveToPosition : Number -> Int -> Position -> Shape -> Shape
 moveToPosition r n position shape =
     shape
         |> moveX (-1 * r / 2)
         |> moveY (-1 * r / 2)
-        |> moveX (-1 * r * (n / 2 - 1))
-        |> moveY (-1 * r * (n / 2 - 1))
-        |> moveX (r * position.posX)
-        |> moveY (r * position.posY)
+        |> moveX (-1 * r * (toFloat n / 2 - 1))
+        |> moveY (-1 * r * (toFloat n / 2 - 1))
+        |> moveX (r * toFloat position.posX)
+        |> moveY (r * toFloat position.posY)
 
 
-drawGridX : Number -> Number -> List Shape
+drawGridX : Number -> Int -> List Shape
 drawGridX r n =
     let
         go : Int -> Shape
         go m =
-            rectangle black 1 (r * n)
-                |> moveX ((n / 2 - toFloat m) * r)
+            rectangle black 1 (r * toFloat n)
+                |> moveX ((toFloat n / 2 - toFloat m) * r)
     in
     List.map go
-        (List.range 0 (round n))
+        (List.range 0 n)
 
 
-drawGridY : Number -> Number -> List Shape
+drawGridY : Number -> Int -> List Shape
 drawGridY r n =
     let
         go : Int -> Shape
         go m =
-            rectangle black (r * n) 1
-                |> moveY ((n / 2 - toFloat m) * r)
+            rectangle black (r * toFloat n) 1
+                |> moveY ((toFloat n / 2 - toFloat m) * r)
     in
     List.map go
-        (List.range 0 (round n))
+        (List.range 0 n)
 
 
 
@@ -374,10 +374,10 @@ update_board : Computer -> Board -> Board
 update_board computer board =
     let
         newPosX =
-            boundaries 0 (board.size - 1) (board.playerPos.posX + toX computer.keyboard)
+            boundaries 0 (board.size - 1) (board.playerPos.posX + round (toX computer.keyboard))
 
         newPosY =
-            boundaries 0 (board.size - 1) (board.playerPos.posY + toY computer.keyboard)
+            boundaries 0 (board.size - 1) (board.playerPos.posY + round (toY computer.keyboard))
 
         newPos =
             Position newPosX newPosY
