@@ -85,12 +85,17 @@ type alias Position =
     }
 
 
-type Drone
-    = Drone
-        { color : GameColor
-        , size : Number
-        , carry : Maybe Drone
-        }
+type alias Drone =
+    { color : GameColor
+    , size : Number
+    , carry : Maybe CarriedDrone
+    }
+
+
+type alias CarriedDrone =
+    { color : GameColor
+    , size : Number
+    }
 
 
 type Direction
@@ -173,14 +178,14 @@ level : Board
 level =
     { size = 20
     , playerPos = Position 0 0
-    , playerDrone = Drone { color = Blue, size = 3, carry = Nothing }
+    , playerDrone = Drone Blue 3 Nothing
     , items =
         fromList
             (wallItems
                 [ Wall (Position 5 5) Vertical 4
                 , Wall (Position 5 5) Horizontal 7
                 ]
-                ++ [ ( Position 9 3, DroneItem (Drone { color = Red, size = 3, carry = Nothing }) )
+                ++ [ ( Position 9 3, DroneItem (Drone Red 3 Nothing) )
                    , ( Position 10 10, GarageItem (Garage Red) )
                    ]
             )
@@ -279,7 +284,7 @@ drawItem r n ( pos, item ) =
 
 drawGarage : Number -> Number -> Position -> Garage -> Shape
 drawGarage r n pos garage =
-    moveToPosition r n pos (circle (droneColor garage.color) r)
+    moveToPosition r n pos (circle (droneColor garage.color) (r / 2))
 
 
 drawWall : Number -> Shape
@@ -288,7 +293,7 @@ drawWall r =
 
 
 drawDrone : Number -> Number -> Position -> Drone -> List Shape
-drawDrone r n pos (Drone drone) =
+drawDrone r n pos drone =
     let
         justDrone =
             image r r "../res/drone.jpg"
@@ -299,7 +304,7 @@ drawDrone r n pos (Drone drone) =
                 Nothing ->
                     rectangle (droneColor drone.color) (r / 6) (r / 6)
 
-                Just (Drone carried) ->
+                Just carried ->
                     rectangle (droneColor carried.color) (r / 3) (r / 3)
     in
     List.map (moveToPosition r n pos) [ justDrone, droneCarry ]
@@ -367,53 +372,64 @@ is_pressed computer =
 
 update_board : Computer -> Board -> Board
 update_board computer board =
-    case board.playerDrone of
-        Drone { color, size, carry } ->
-            let
-                newPosX =
-                    boundaries 0 (board.size - 1) (board.playerPos.posX + toX computer.keyboard)
+    let
+        newPosX =
+            boundaries 0 (board.size - 1) (board.playerPos.posX + toX computer.keyboard)
 
-                newPosY =
-                    boundaries 0 (board.size - 1) (board.playerPos.posY + toY computer.keyboard)
+        newPosY =
+            boundaries 0 (board.size - 1) (board.playerPos.posY + toY computer.keyboard)
 
-                newPos =
-                    Position newPosX newPosY
-            in
-            case get newPos board.items of
-                Nothing ->
-                    { size = board.size
-                    , playerPos = newPos
-                    , playerDrone = Drone { color = color, size = size, carry = carry }
-                    , items = board.items
-                    }
+        newPos =
+            Position newPosX newPosY
+    in
+    case get newPos board.items of
+        Nothing ->
+            { board | playerPos = newPos }
 
-                Just WallItem ->
-                    board
+        Just WallItem ->
+            board
 
-                Just (DroneItem drone) ->
-                    { size = board.size
-                    , playerPos = newPos
-                    , playerDrone = Drone { color = color, size = size, carry = Just drone }
+        Just (DroneItem drone) ->
+            if board.playerDrone.size > drone.size then
+                let
+                    carried_drone =
+                        CarriedDrone drone.color drone.size
+
+                    player_drone =
+                        board.playerDrone
+                in
+                { board
+                    | playerPos = newPos
+                    , playerDrone = { player_drone | carry = Just carried_drone }
                     , items = remove newPos board.items
-                    }
+                }
 
-                Just (GarageItem garage) ->
-                    case carry of
-                        Nothing ->
-                            board
+            else
+                board
 
-                        Just carried_drone ->
-                            case carried_drone of
-                                Drone { c=color, s=size, c=carry } ->
-                                    if garage.color /= carried_color then
-                                        board
+        Just (GarageItem garage) ->
+            case board.playerDrone.carry of
+                Nothing ->
+                    { board | playerPos = newPos }
 
-                                    else
-                                        { size = board.size
-                                        , playerPos = newPos
-                                        , playerDrone = Drone { color = color, size = size + carried_size, carry = Nothing }
-                                        , items = remove newPos board.items
-                                        }
+                Just carried_drone ->
+                    if garage.color /= carried_drone.color then
+                        board
+
+                    else
+                        let
+                            player_drone =
+                                board.playerDrone
+                        in
+                        { board
+                            | playerPos = newPos
+                            , playerDrone =
+                                { player_drone
+                                    | size = player_drone.size + carried_drone.size
+                                    , carry = Nothing
+                                }
+                            , items = remove newPos board.items
+                        }
 
 
 boundaries : comparable -> comparable -> comparable -> comparable
