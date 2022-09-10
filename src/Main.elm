@@ -115,10 +115,17 @@ type alias Garage =
     }
 
 
+type alias Portal =
+    { color : GameColor
+    , open : Bool
+    }
+
+
 type Item
     = WallItem
     | DroneItem Drone
     | GarageItem Garage
+    | PortalItem Portal
 
 
 type alias Items =
@@ -176,9 +183,9 @@ make_game board =
 
 level : Board
 level =
-    { size = 20
+    { size = 15
     , playerPos = Position 0 0
-    , playerDrone = Drone Blue 3 Nothing
+    , playerDrone = Drone Blue 4 Nothing
     , items =
         fromList
             (wallItems
@@ -187,6 +194,10 @@ level =
                 ]
                 ++ [ ( Position 9 3, DroneItem (Drone Red 3 Nothing) )
                    , ( Position 10 10, GarageItem (Garage Red) )
+                   , ( Position 0 14, DroneItem (Drone Red 6 Nothing) )
+                   , ( Position 3 12, PortalItem (Portal Red False) )
+                   , ( Position 6 12, PortalItem (Portal Green False) )
+                   , ( Position 9 12, PortalItem (Portal Blue False) )
                    ]
             )
     }
@@ -281,6 +292,38 @@ drawItem r n ( pos, item ) =
         GarageItem garage ->
             [ drawGarage r n pos garage ]
 
+        PortalItem portal ->
+            if portal.open then
+                [ drawOpenPortal r n pos portal.color ]
+
+            else
+                [ drawClosedPortal r n pos portal.color ]
+
+
+drawOpenPortal : Number -> Int -> Position -> GameColor -> Shape
+drawOpenPortal r n pos color =
+    let
+        file_infix =
+            case color of
+                Red ->
+                    "red"
+
+                Blue ->
+                    "blue"
+
+                Green ->
+                    "green"
+
+        file_name =
+            "../res/portal_" ++ file_infix ++ ".jpg"
+    in
+    moveToPosition r n pos (image r r file_name)
+
+
+drawClosedPortal : Number -> Int -> Position -> GameColor -> Shape
+drawClosedPortal r n pos color =
+    drawOpenPortal r n pos color
+
 
 drawGarage : Number -> Int -> Position -> Garage -> Shape
 drawGarage r n pos garage =
@@ -306,8 +349,11 @@ drawDrone r n pos drone =
 
                 Just carried ->
                     rectangle (droneColor carried.color) (r / 3) (r / 3)
+
+        droneSize =
+            words black (String.fromInt drone.size)
     in
-    List.map (moveToPosition r n pos) [ justDrone, droneCarry ]
+    List.map (moveToPosition r n pos) [ justDrone, droneCarry, droneSize ]
 
 
 moveToPosition : Number -> Int -> Position -> Shape -> Shape
@@ -428,8 +474,10 @@ update_board computer board =
                                     | size = player_drone.size + carried_drone.size
                                     , carry = Nothing
                                 }
-                            , items = remove newPos board.items
                         }
+
+        Just (PortalItem _) ->
+            board
 
 
 boundaries : comparable -> comparable -> comparable -> comparable
