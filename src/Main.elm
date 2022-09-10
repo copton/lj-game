@@ -141,7 +141,9 @@ type alias Board =
 
 
 type alias Meta =
-    { key_down : Bool }
+    { key_down : Bool
+    , counter : Int
+    }
 
 
 type alias Game =
@@ -178,7 +180,7 @@ wallItems walls =
 
 make_game : Board -> Game
 make_game board =
-    { board = board, meta = { key_down = False } }
+    { board = board, meta = { key_down = False, counter = 0 } }
 
 
 level : Board
@@ -195,6 +197,7 @@ level =
                 ++ [ ( Position 9 3, DroneItem (Drone Red 3 Nothing) )
                    , ( Position 10 10, GarageItem (Garage Red) )
                    , ( Position 0 14, DroneItem (Drone Red 6 Nothing) )
+                   , ( Position 1 14, DroneItem (Drone Red 5 Nothing) )
                    , ( Position 3 12, PortalItem (Portal Red False) )
                    , ( Position 6 12, PortalItem (Portal Green False) )
                    , ( Position 9 12, PortalItem (Portal Blue False) )
@@ -397,18 +400,33 @@ drawGridY r n =
 
 update_game : Computer -> Game -> Game
 update_game computer game =
-    case ( game.meta.key_down, is_pressed computer ) of
+    let
+        deltaX =
+            round (toX computer.keyboard)
+
+        deltaY =
+            round (toY computer.keyboard)
+    in
+    case ( is_pressed computer, game.meta.key_down ) of
         ( False, False ) ->
             game
 
-        ( False, True ) ->
-            { board = update_board computer game.board, meta = { key_down = True } }
+        ( True, False ) ->
+            { board = update_board deltaX deltaY game.board, meta = { key_down = True, counter = 0 } }
 
         ( True, True ) ->
-            game
+            if game.meta.counter < 10 then
+                let
+                    meta =
+                        game.meta
+                in
+                { board = game.board, meta = { meta | counter = meta.counter + 1 } }
 
-        ( True, False ) ->
-            { board = game.board, meta = { key_down = False } }
+            else
+                { board = update_board deltaX deltaY game.board, meta = { key_down = True, counter = 0 } }
+
+        ( False, True ) ->
+            { board = game.board, meta = { key_down = False, counter = 0 } }
 
 
 is_pressed : Computer -> Bool
@@ -416,14 +434,14 @@ is_pressed computer =
     computer.keyboard.up || computer.keyboard.down || computer.keyboard.left || computer.keyboard.right
 
 
-update_board : Computer -> Board -> Board
-update_board computer board =
+update_board : Int -> Int -> Board -> Board
+update_board deltaX deltaY board =
     let
         newPosX =
-            boundaries 0 (board.size - 1) (board.playerPos.posX + round (toX computer.keyboard))
+            boundaries 0 (board.size - 1) (board.playerPos.posX + deltaX)
 
         newPosY =
-            boundaries 0 (board.size - 1) (board.playerPos.posY + round (toY computer.keyboard))
+            boundaries 0 (board.size - 1) (board.playerPos.posY + deltaY)
 
         newPos =
             Position newPosX newPosY
@@ -436,22 +454,35 @@ update_board computer board =
             board
 
         Just (DroneItem drone) ->
-            if board.playerDrone.size > drone.size then
-                let
-                    carried_drone =
-                        CarriedDrone drone.color drone.size
-
-                    player_drone =
-                        board.playerDrone
-                in
-                { board
-                    | playerPos = newPos
-                    , playerDrone = { player_drone | carry = Just carried_drone }
-                    , items = remove newPos board.items
-                }
+            if board.playerDrone.size <= drone.size then
+                board
 
             else
-                board
+                case board.playerDrone.carry of
+                    Nothing ->
+                        let
+                            carried_drone =
+                                CarriedDrone drone.color drone.size
+
+                            player_drone =
+                                board.playerDrone
+                        in
+                        { board
+                            | playerPos = newPos
+                            , playerDrone = { player_drone | carry = Just carried_drone }
+                            , items = remove newPos board.items
+                        }
+
+                    Just carried_drone ->
+                        let
+                            player_drone =
+                                board.playerDrone
+                        in
+                        { board
+                            | playerPos = newPos
+                            , playerDrone = { player_drone | carry = Just (CarriedDrone drone.color drone.size) }
+                            , items = insert newPos (DroneItem (Drone carried_drone.color carried_drone.size Nothing)) board.items
+                        }
 
         Just (GarageItem garage) ->
             case board.playerDrone.carry of
