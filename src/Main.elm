@@ -328,7 +328,7 @@ drawItem r n ( pos, item ) =
 
 
 drawOpenPortal : Number -> Int -> Position -> GameColor -> Int -> List Shape
-drawOpenPortal r n pos color size =
+drawOpenPortal r n pos color _ =
     let
         file_infix =
             case color of
@@ -340,17 +340,6 @@ drawOpenPortal r n pos color size =
 
                 Green ->
                     "green"
-
-        size_color =
-            case color of
-                Red ->
-                    black
-
-                Blue ->
-                    black
-
-                Green ->
-                    red
 
         file_name =
             "../res/portal_" ++ file_infix ++ ".jpg"
