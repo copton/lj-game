@@ -5,9 +5,10 @@
 --
 
 
-module Main exposing (main, update_game, view_game)
+module Main exposing (update_game, view_game)
 
 import Dict
+import Html exposing (p)
 import Playground exposing (..)
 
 
@@ -138,12 +139,18 @@ type alias Board =
     , playerPos : Position
     , playerDrone : Drone
     , items : Items
+    , ticker : Int
+    }
+
+
+type alias InnertKeys =
+    { counting : Bool
+    , counter : Int
     }
 
 
 type alias Meta =
-    { key_down : Bool
-    , counter : Int
+    { innert_keys : InnertKeys
     }
 
 
@@ -181,7 +188,17 @@ wallItems walls =
 
 make_game : Board -> Game
 make_game board =
-    { board = board, meta = { key_down = False, counter = 0 } }
+    let
+        innert_keys =
+            { counting = False, counter = 0 }
+
+        meta =
+            { innert_keys = innert_keys }
+
+        game =
+            { board = board, meta = meta }
+    in
+    game
 
 
 level : Board
@@ -204,6 +221,7 @@ level =
                    , ( Position 9 12, PortalItem (Portal Blue 7 False) )
                    ]
             )
+    , ticker = 0
     }
 
 
@@ -428,35 +446,56 @@ drawGridY r n =
 -- UPDATE
 
 
+innert_key_pressing : Computer -> InnertKeys -> ( InnertKeys, Bool )
+innert_key_pressing computer state =
+    case ( is_pressed computer, state.counting ) of
+        ( False, False ) ->
+            ( state, False )
+
+        ( False, True ) ->
+            ( { counting = False, counter = 0 }, False )
+
+        ( True, False ) ->
+            ( { counting = True, counter = 0 }, True )
+
+        ( True, True ) ->
+            if state.counter < 10 then
+                ( { counting = True, counter = state.counter + 1 }, False )
+
+            else
+                ( { counting = True, counter = 0 }, True )
+
+
 update_game : Computer -> Game -> Game
 update_game computer game =
     let
+        ( new_innert_keys, key_down ) =
+            innert_key_pressing computer game.meta.innert_keys
+
+        new_meta =
+            { innert_keys = new_innert_keys }
+
         deltaX =
-            round (toX computer.keyboard)
-
-        deltaY =
-            round (toY computer.keyboard)
-    in
-    case ( is_pressed computer, game.meta.key_down ) of
-        ( False, False ) ->
-            game
-
-        ( True, False ) ->
-            { board = update_board deltaX deltaY game.board, meta = { key_down = True, counter = 0 } }
-
-        ( True, True ) ->
-            if game.meta.counter < 10 then
-                let
-                    meta =
-                        game.meta
-                in
-                { board = game.board, meta = { meta | counter = meta.counter + 1 } }
+            if key_down then
+                round (toX computer.keyboard)
 
             else
-                { board = update_board deltaX deltaY game.board, meta = { key_down = True, counter = 0 } }
+                0
 
-        ( False, True ) ->
-            { board = game.board, meta = { key_down = False, counter = 0 } }
+        deltaY =
+            if key_down then
+                round (toY computer.keyboard)
+
+            else
+                0
+
+        new_board =
+            update_board deltaX deltaY game.board
+
+        new_game =
+            { board = new_board, meta = new_meta }
+    in
+    new_game
 
 
 is_pressed : Computer -> Bool
@@ -467,82 +506,103 @@ is_pressed computer =
 update_board : Int -> Int -> Board -> Board
 update_board deltaX deltaY board =
     let
-        newPosX =
+        new_ticker =
+            board.ticker + 1
+
+        pos_x =
             boundaries 0 (board.size - 1) (board.playerPos.posX + deltaX)
 
-        newPosY =
+        pos_y =
             boundaries 0 (board.size - 1) (board.playerPos.posY + deltaY)
 
-        newPos =
-            Position newPosX newPosY
-    in
-    case get newPos board.items of
-        Nothing ->
-            { board | playerPos = newPos }
+        pos =
+            Position pos_x pos_y
 
-        Just WallItem ->
-            board
+        ( can_move, new_player_drone, new_items ) =
+            move_player pos board.playerDrone board.items
 
-        Just (DroneItem drone) ->
-            if board.playerDrone.size <= drone.size then
-                board
+        new_pos =
+            if can_move then
+                pos
 
             else
-                case board.playerDrone.carry of
+                board.playerPos
+
+        new_board =
+            { size = board.size, playerPos = new_pos, playerDrone = new_player_drone, items = new_items, ticker = new_ticker }
+    in
+    new_board
+
+
+move_player : Position -> Drone -> Items -> ( Bool, Drone, Items )
+move_player position player_drone items =
+    case get position items of
+        Nothing ->
+            ( True, player_drone, items )
+
+        Just WallItem ->
+            ( False, player_drone, items )
+
+        Just (DroneItem drone) ->
+            if player_drone.size <= drone.size then
+                ( False, player_drone, items )
+
+            else
+                case player_drone.carry of
                     Nothing ->
                         let
                             carried_drone =
                                 CarriedDrone drone.color drone.size
 
-                            player_drone =
-                                board.playerDrone
+                            new_player_drone =
+                                { player_drone | carry = Just carried_drone }
+
+                            new_items =
+                                remove position items
                         in
-                        { board
-                            | playerPos = newPos
-                            , playerDrone = { player_drone | carry = Just carried_drone }
-                            , items = remove newPos board.items
-                        }
+                        ( True, new_player_drone, new_items )
 
                     Just carried_drone ->
                         let
-                            player_drone =
-                                board.playerDrone
+                            new_carried_drone =
+                                CarriedDrone drone.color drone.size
+
+                            dropped_drone =
+                                Drone carried_drone.color carried_drone.size Nothing
+
+                            new_player_drone =
+                                { player_drone | carry = Just new_carried_drone }
+
+                            new_items =
+                                insert position (DroneItem dropped_drone) items
                         in
-                        { board
-                            | playerPos = newPos
-                            , playerDrone = { player_drone | carry = Just (CarriedDrone drone.color drone.size) }
-                            , items = insert newPos (DroneItem (Drone carried_drone.color carried_drone.size Nothing)) board.items
-                        }
+                        ( True, new_player_drone, new_items )
 
         Just (GarageItem garage) ->
-            case board.playerDrone.carry of
+            case player_drone.carry of
                 Nothing ->
-                    { board | playerPos = newPos }
+                    ( True, player_drone, items )
 
                 Just carried_drone ->
                     if garage.color /= carried_drone.color then
-                        board
+                        ( False, player_drone, items )
 
                     else
                         let
-                            player_drone =
-                                board.playerDrone
-                        in
-                        { board
-                            | playerPos = newPos
-                            , playerDrone =
+                            new_player_drone =
                                 { player_drone
                                     | size = player_drone.size + carried_drone.size
                                     , carry = Nothing
                                 }
-                        }
+                        in
+                        ( True, new_player_drone, items )
 
         Just (PortalItem portal) ->
-            if portal.size > board.playerDrone.size then
-                board
+            if portal.size > player_drone.size then
+                ( False, player_drone, items )
 
             else
-                { board | playerPos = newPos }
+                ( True, player_drone, items )
 
 
 boundaries : comparable -> comparable -> comparable -> comparable
