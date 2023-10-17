@@ -318,11 +318,22 @@ drawOpenPortal r n pos color size =
                 Green ->
                     "green"
 
+        size_color =
+            case color of
+                Red ->
+                    black
+
+                Blue ->
+                    black
+
+                Green ->
+                    red
+
         file_name =
             "../res/portal_" ++ file_infix ++ ".jpg"
 
         portal_size =
-            words black (String.fromInt size)
+            words size_color (String.fromInt size)
 
         portal =
             image r r file_name
@@ -348,22 +359,34 @@ drawWall r =
 drawDrone : Number -> Int -> Position -> Drone -> List Shape
 drawDrone r n pos drone =
     let
-        justDrone =
+        drone_image =
             image r r "../res/drone.jpg"
 
-        -- rectangle (droneColor drone.color) r r
-        droneCarry =
+        drone_carry =
             case drone.carry of
                 Nothing ->
-                    rectangle (droneColor drone.color) (r / 6) (r / 6)
+                    []
 
                 Just carried ->
-                    rectangle (droneColor carried.color) (r / 3) (r / 3)
+                    let
+                        fn =
+                            moveToPosition r n pos << (\shape -> shape |> moveY (r / 4))
+                    in
+                    List.map fn [ carried_pane carried, carried_number carried ]
 
-        droneSize =
-            words black (String.fromInt drone.size)
+        carried_pane carried =
+            rectangle (droneColor carried.color) (r / 4) (r / 4)
+
+        carried_number carried =
+            words white (String.fromInt carried.size)
+
+        drone_color =
+            rectangle (droneColor drone.color) (r / 4) (r / 4)
+
+        drone_size =
+            words white (String.fromInt drone.size)
     in
-    List.map (moveToPosition r n pos) [ justDrone, droneCarry, droneSize ]
+    List.map (moveToPosition r n pos) [ drone_image, drone_color, drone_size ] ++ drone_carry
 
 
 moveToPosition : Number -> Int -> Position -> Shape -> Shape
