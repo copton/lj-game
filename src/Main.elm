@@ -8,7 +8,7 @@
 module Main exposing (update_game, view_game)
 
 import Dict
-import Html exposing (p)
+import Html exposing (b, p)
 import Playground exposing (..)
 
 
@@ -58,6 +58,11 @@ toList d =
 fromList : List ( Position, a ) -> PDict a
 fromList =
     List.foldr (\( pos, value ) d -> insert pos value d) empty
+
+
+map : (a -> b) -> PDict a -> PDict b
+map f =
+    fromList << List.map (\( p, x ) -> ( p, f x )) << toList
 
 
 union : PDict a -> PDict a -> PDict a
@@ -350,6 +355,40 @@ drawOpenPortal r n pos color size =
         file_name =
             "../res/portal_" ++ file_infix ++ ".jpg"
 
+        portal =
+            image r r file_name
+    in
+    List.map (moveToPosition r n pos) [ portal ]
+
+
+drawClosedPortal : Number -> Int -> Position -> GameColor -> Int -> List Shape
+drawClosedPortal r n pos color size =
+    let
+        file_infix =
+            case color of
+                Red ->
+                    "red"
+
+                Blue ->
+                    "blue"
+
+                Green ->
+                    "green"
+
+        size_color =
+            case color of
+                Red ->
+                    black
+
+                Blue ->
+                    black
+
+                Green ->
+                    red
+
+        file_name =
+            "../res/portal_" ++ file_infix ++ ".jpg"
+
         portal_size =
             words size_color (String.fromInt size)
 
@@ -357,11 +396,6 @@ drawOpenPortal r n pos color size =
             image r r file_name
     in
     List.map (moveToPosition r n pos) [ portal, portal_size ]
-
-
-drawClosedPortal : Number -> Int -> Position -> GameColor -> Int -> List Shape
-drawClosedPortal r n pos color size =
-    drawOpenPortal r n pos color size
 
 
 drawGarage : Number -> Int -> Position -> Garage -> Shape
@@ -521,6 +555,9 @@ update_board deltaX deltaY board =
         ( can_move, new_player_drone, new_items ) =
             move_player pos board.playerDrone board.items
 
+        new_items_with_modified_portals =
+            possibly_open_close_portals new_player_drone.size new_items
+
         new_pos =
             if can_move then
                 pos
@@ -529,7 +566,7 @@ update_board deltaX deltaY board =
                 board.playerPos
 
         new_board =
-            { size = board.size, playerPos = new_pos, playerDrone = new_player_drone, items = new_items, ticker = new_ticker }
+            { size = board.size, playerPos = new_pos, playerDrone = new_player_drone, items = new_items_with_modified_portals, ticker = new_ticker }
     in
     new_board
 
@@ -603,6 +640,24 @@ move_player position player_drone items =
 
             else
                 ( True, player_drone, items )
+
+
+possibly_open_close_portals : Int -> Items -> Items
+possibly_open_close_portals player_drone_size items =
+    let
+        open item =
+            case item of
+                PortalItem portal ->
+                    if portal.size == player_drone_size then
+                        PortalItem { portal | open = True }
+
+                    else
+                        PortalItem { portal | open = False }
+
+                _ ->
+                    item
+    in
+    map open items
 
 
 boundaries : comparable -> comparable -> comparable -> comparable
