@@ -117,6 +117,7 @@ type alias Garage =
 
 type alias Portal =
     { color : GameColor
+    , size : Int
     , open : Bool
     }
 
@@ -198,9 +199,9 @@ level =
                    , ( Position 10 10, GarageItem (Garage Red) )
                    , ( Position 0 14, DroneItem (Drone Red 6 Nothing) )
                    , ( Position 1 14, DroneItem (Drone Red 5 Nothing) )
-                   , ( Position 3 12, PortalItem (Portal Red False) )
-                   , ( Position 6 12, PortalItem (Portal Green False) )
-                   , ( Position 9 12, PortalItem (Portal Blue False) )
+                   , ( Position 3 12, PortalItem (Portal Red 5 False) )
+                   , ( Position 6 12, PortalItem (Portal Green 6 False) )
+                   , ( Position 9 12, PortalItem (Portal Blue 7 False) )
                    ]
             )
     }
@@ -297,14 +298,14 @@ drawItem r n ( pos, item ) =
 
         PortalItem portal ->
             if portal.open then
-                [ drawOpenPortal r n pos portal.color ]
+                drawOpenPortal r n pos portal.color portal.size
 
             else
-                [ drawClosedPortal r n pos portal.color ]
+                drawClosedPortal r n pos portal.color portal.size
 
 
-drawOpenPortal : Number -> Int -> Position -> GameColor -> Shape
-drawOpenPortal r n pos color =
+drawOpenPortal : Number -> Int -> Position -> GameColor -> Int -> List Shape
+drawOpenPortal r n pos color size =
     let
         file_infix =
             case color of
@@ -319,13 +320,19 @@ drawOpenPortal r n pos color =
 
         file_name =
             "../res/portal_" ++ file_infix ++ ".jpg"
+
+        portal_size =
+            words black (String.fromInt size)
+
+        portal =
+            image r r file_name
     in
-    moveToPosition r n pos (image r r file_name)
+    List.map (moveToPosition r n pos) [ portal, portal_size ]
 
 
-drawClosedPortal : Number -> Int -> Position -> GameColor -> Shape
-drawClosedPortal r n pos color =
-    drawOpenPortal r n pos color
+drawClosedPortal : Number -> Int -> Position -> GameColor -> Int -> List Shape
+drawClosedPortal r n pos color size =
+    drawOpenPortal r n pos color size
 
 
 drawGarage : Number -> Int -> Position -> Garage -> Shape
@@ -507,8 +514,12 @@ update_board deltaX deltaY board =
                                 }
                         }
 
-        Just (PortalItem _) ->
-            board
+        Just (PortalItem portal) ->
+            if portal.size > board.playerDrone.size then
+                board
+
+            else
+                { board | playerPos = newPos }
 
 
 boundaries : comparable -> comparable -> comparable -> comparable
