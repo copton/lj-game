@@ -596,6 +596,9 @@ move_player position player_drone items =
 
             else
                 case player_drone.carry of
+                    Just _ ->
+                        ( False, player_drone, items )
+
                     Nothing ->
                         let
                             carried_drone =
@@ -606,22 +609,6 @@ move_player position player_drone items =
 
                             new_items =
                                 remove position items
-                        in
-                        ( True, new_player_drone, new_items )
-
-                    Just carried_drone ->
-                        let
-                            new_carried_drone =
-                                CarriedDrone drone.color drone.size
-
-                            dropped_drone =
-                                Drone carried_drone.color carried_drone.size Nothing
-
-                            new_player_drone =
-                                { player_drone | carry = Just new_carried_drone }
-
-                            new_items =
-                                insert position (DroneItem dropped_drone) items
                         in
                         ( True, new_player_drone, new_items )
 
