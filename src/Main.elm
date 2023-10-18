@@ -285,7 +285,7 @@ drawBoard r board =
     drawGridX r board.size
         ++ drawGridY r board.size
         --        ++ drawTiles r board.size
-        ++ List.concatMap (drawItem r board.size) (toList board.items)
+        ++ List.concatMap (drawItem r board.size board.ticker) (toList board.items)
         ++ drawDrone r board.size board.playerPos board.playerDrone
 
 
@@ -307,8 +307,8 @@ drawTiles r n =
     List.map drawTile (allPositions n)
 
 
-drawItem : Number -> Int -> ( Position, Item ) -> List Shape
-drawItem r n ( pos, item ) =
+drawItem : Number -> Int -> Int -> ( Position, Item ) -> List Shape
+drawItem r n ticker ( pos, item ) =
     case item of
         WallItem ->
             [ moveToPosition r n pos (drawWall r) ]
@@ -321,14 +321,14 @@ drawItem r n ( pos, item ) =
 
         PortalItem portal ->
             if portal.open then
-                drawOpenPortal r n pos portal.color portal.size
+                drawOpenPortal r n pos portal.color portal.size ticker
 
             else
                 drawClosedPortal r n pos portal.color portal.size
 
 
-drawOpenPortal : Number -> Int -> Position -> GameColor -> Int -> List Shape
-drawOpenPortal r n pos color _ =
+drawOpenPortal : Number -> Int -> Position -> GameColor -> Int -> Int -> List Shape
+drawOpenPortal r n pos color size ticker =
     let
         file_infix =
             case color of
@@ -341,13 +341,34 @@ drawOpenPortal r n pos color _ =
                 Green ->
                     "green"
 
+        size_color =
+            case color of
+                Red ->
+                    black
+
+                Blue ->
+                    black
+
+                Green ->
+                    red
+
         file_name =
             "../res/portal_" ++ file_infix ++ ".jpg"
+
+        portal_size =
+            words size_color (String.fromInt size)
+
+        show_portal_size =
+            if (modBy 10 ticker >= 0) && (modBy 10 ticker < 5) then
+                [ portal_size ]
+
+            else
+                []
 
         portal =
             image r r file_name
     in
-    List.map (moveToPosition r n pos) [ portal ]
+    List.map (moveToPosition r n pos) (portal :: show_portal_size)
 
 
 drawClosedPortal : Number -> Int -> Position -> GameColor -> Int -> List Shape
