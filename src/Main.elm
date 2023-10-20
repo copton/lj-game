@@ -10,6 +10,7 @@ module Main exposing (update_game, view_game)
 import Dict
 import Html exposing (b, p)
 import Playground exposing (..)
+import Set
 
 
 
@@ -492,7 +493,11 @@ drawGridY r n =
 
 innert_key_pressing : Computer -> InnertKeys -> ( InnertKeys, Bool )
 innert_key_pressing computer state =
-    case ( is_pressed computer, state.counting ) of
+    let
+        is_pressed =
+            not (Set.isEmpty computer.keyboard.keys)
+    in
+    case ( is_pressed, state.counting ) of
         ( False, False ) ->
             ( state, False )
 
@@ -526,25 +531,58 @@ update_game computer game =
             else
                 0
 
-        deltaY =
-            if key_down then
-                round (toY computer.keyboard)
+        go_left =
+            if Set.member "ArrowLeft" computer.keyboard.keys then
+                -1
 
             else
                 0
 
+        go_right =
+            if Set.member "ArrowRight" computer.keyboard.keys then
+                1
+
+            else
+                0
+
+        delta_x =
+            if key_down then
+                go_left + go_right
+
+            else
+                0
+
+        go_up =
+            if Set.member "ArrowUp" computer.keyboard.keys then
+                1
+
+            else
+                0
+
+        go_down =
+            if Set.member "ArrowDown" computer.keyboard.keys then
+                -1
+
+            else
+                0
+
+        delta_y =
+            if key_down then
+                go_up + go_down
+
+            else
+                0
+
+        drop =
+            key_down && Set.member "d" computer.keyboard.keys
+
         new_board =
-            update_board deltaX deltaY game.board
+            update_board delta_x delta_y game.board
 
         new_game =
             { board = new_board, meta = new_meta }
     in
     new_game
-
-
-is_pressed : Computer -> Bool
-is_pressed computer =
-    computer.keyboard.up || computer.keyboard.down || computer.keyboard.left || computer.keyboard.right
 
 
 update_board : Int -> Int -> Board -> Board
